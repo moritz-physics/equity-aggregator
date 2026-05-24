@@ -1,0 +1,20 @@
+services:
+  equity-aggregator:
+    build: .
+    ports:
+      - "8502:8502"
+    volumes:
+      - equity_cache:/app/data
+    environment:
+      - CACHE_TTL_HOURS=${CACHE_TTL_HOURS:-24}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8502/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  equity_cache:
+    driver: local

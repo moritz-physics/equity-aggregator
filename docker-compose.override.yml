@@ -1,0 +1,8 @@
+# Dev-only override: bind-mounts the repo at /app so edits are picked up
+# without rebuilding. Side effect: shadows the image's baked-in .venv, so
+# `uv` rebuilds it on every container start (~20s to healthy). For production
+# use the base compose: `docker compose -f docker-compose.yml up -d`.
+services:
+  equity-aggregator:
+    volumes:
+      - .:/app

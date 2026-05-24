@@ -1,0 +1,25 @@
+# Data sources for equity-aggregator.
+# This file documents the external data providers used by the project.
+# No business logic — purely declarative metadata.
+
+sources:
+  yfinance:
+    name: Yahoo Finance (via yfinance)
+    url: https://finance.yahoo.com
+    auth_required: false
+    unofficial: true
+    reliability: >
+      Unofficial scrape-based library. Endpoints, rate limits, and field
+      shapes change without notice. Treat as best-effort; never as a system
+      of record. Cache aggressively and validate every response.
+
+  openfigi:
+    name: OpenFIGI (Bloomberg)
+    url: https://www.openfigi.com/api
+    auth_required: false
+    unofficial: false
+    reliability: >
+      Official Bloomberg-operated identifier mapping API. Rate-limited
+      (25 req/min anonymous, 25 req/6s with API key). Stable schema.
+      Use for ticker -> FIGI / ISIN resolution and security metadata
+      cross-referencing.
