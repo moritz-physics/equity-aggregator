@@ -8,6 +8,7 @@ the Streamlit layer is a thin wiring layer on top.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Any, cast
 
 import pandas as pd  # pyright: ignore[reportMissingTypeStubs]
 
@@ -78,6 +79,86 @@ def filter_constituents(
             continue
         out.append(c)
     return out
+
+
+_FIELD_TO_COLUMN: dict[str, str] = {
+    "Company": "Company",
+    "Ticker": "Ticker",
+    "Country": "Country",
+    "Sector": "Sector",
+    "Currency": "Currency",
+    "Market Cap": "Market Cap",
+    "Price": "Price",
+    "TTM Div Yield": "TTM Div Yield",
+    "Beta": "Beta",
+}
+
+
+def _to_numeric(series: Any) -> Any:
+    return cast(Any, pd).to_numeric(series, errors="coerce")
+
+
+def _rule_mask(df: pd.DataFrame, rule: dict[str, Any]) -> Any:
+    col = _FIELD_TO_COLUMN[str(rule["field"])]
+    op = str(rule["operator"])
+    val = rule.get("value")
+    val2 = rule.get("value2")
+    series = cast(Any, df[col])
+    all_true = pd.Series([True] * len(df), index=df.index)
+
+    if op in ("contains", "not contains"):
+        if val is None or val == "":
+            return all_true
+        mask = series.astype(str).str.contains(str(val), case=False, na=False)
+        return ~mask if op == "not contains" else mask
+    if op == "is":
+        if val is None or val == "":
+            return all_true
+        return series == val
+    if op == "is not":
+        if val is None or val == "":
+            return all_true
+        return series != val
+    if op in ("<", ">", "=", "between"):
+        num = _to_numeric(series)
+        if val is None:
+            return all_true
+        if op == "<":
+            return num < float(val)
+        if op == ">":
+            return num > float(val)
+        if op == "=":
+            return num == float(val)
+        if val2 is None:
+            return all_true
+        return (num >= float(val)) & (num <= float(val2))
+    if op == "no dividend":
+        num = _to_numeric(series).fillna(0)
+        return num == 0
+    return all_true
+
+
+def apply_advanced_filters(
+    df: pd.DataFrame, rules: list[dict[str, Any]]
+) -> pd.DataFrame:
+    """Apply a list of advanced filter rules. Empty rules = pass-through.
+
+    Rule shape:
+        {"connector": "AND"|"OR"|None, "field": str, "operator": str,
+         "value": Any, "value2": Any | None}
+
+    Connector on the first rule is ignored; subsequent rules combine left-to-right.
+    """
+    if not rules:
+        return df
+    mask = _rule_mask(df, rules[0])
+    for rule in rules[1:]:
+        m = _rule_mask(df, rule)
+        if rule.get("connector") == "OR":
+            mask = mask | m
+        else:
+            mask = mask & m
+    return cast(pd.DataFrame, cast(Any, df)[mask])
 
 
 def constituents_to_dataframe(

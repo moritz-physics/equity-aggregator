@@ -8,6 +8,7 @@ from equity_aggregator.core.models import Constituent
 from equity_aggregator.ui.utils import (
     DASH,
     DATAFRAME_COLUMNS,
+    apply_advanced_filters,
     constituents_to_dataframe,
     filter_constituents,
     format_market_cap,
@@ -163,3 +164,126 @@ def test_constituents_to_dataframe_preserves_values() -> None:
     assert row["ISIN"] == "DE0007164600"
     assert row["Price"] == 210.0
     assert row["Sector"] == "Technology"
+
+
+# ── apply_advanced_filters ─────────────────────────────────────────────────
+
+
+def _sample_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {"Company": "SAP SE",   "Ticker": "SAP.DE", "Sector": "Technology",
+             "Market Cap": 250_000_000_000, "Price": 210.0, "TTM Div Yield": 1.05},
+            {"Company": "Adidas",   "Ticker": "ADS.DE", "Sector": "Consumer",
+             "Market Cap": 30_000_000_000,  "Price": 180.0, "TTM Div Yield": 0.0},
+            {"Company": "BNP",      "Ticker": "BNP.PA", "Sector": "Financials",
+             "Market Cap": 80_000_000_000,  "Price": 65.0,  "TTM Div Yield": 5.5},
+            {"Company": "Infineon", "Ticker": "IFX.DE", "Sector": "Technology",
+             "Market Cap": 40_000_000_000,  "Price": 35.0,  "TTM Div Yield": None},
+        ]
+    )
+
+
+def test_adv_empty_rules_returns_df_unchanged() -> None:
+    df = _sample_df()
+    out = apply_advanced_filters(df, [])
+    assert len(out) == len(df)
+
+
+def test_adv_contains_matches() -> None:
+    df = _sample_df()
+    out = apply_advanced_filters(
+        df, [{"connector": None, "field": "Company", "operator": "contains",
+              "value": "sap", "value2": None}]
+    )
+    assert out["Ticker"].tolist() == ["SAP.DE"]
+
+
+def test_adv_not_contains_excludes() -> None:
+    df = _sample_df()
+    out = apply_advanced_filters(
+        df, [{"connector": None, "field": "Company", "operator": "not contains",
+              "value": "sap", "value2": None}]
+    )
+    assert "SAP.DE" not in out["Ticker"].tolist()
+
+
+def test_adv_is_exact_sector() -> None:
+    df = _sample_df()
+    out = apply_advanced_filters(
+        df, [{"connector": None, "field": "Sector", "operator": "is",
+              "value": "Technology", "value2": None}]
+    )
+    assert set(out["Ticker"].tolist()) == {"SAP.DE", "IFX.DE"}
+
+
+def test_adv_is_not_excludes_sector() -> None:
+    df = _sample_df()
+    out = apply_advanced_filters(
+        df, [{"connector": None, "field": "Sector", "operator": "is not",
+              "value": "Financials", "value2": None}]
+    )
+    assert "BNP.PA" not in out["Ticker"].tolist()
+
+
+def test_adv_gt_on_market_cap() -> None:
+    df = _sample_df()
+    out = apply_advanced_filters(
+        df, [{"connector": None, "field": "Market Cap", "operator": ">",
+              "value": 100_000_000_000, "value2": None}]
+    )
+    assert out["Ticker"].tolist() == ["SAP.DE"]
+
+
+def test_adv_between_price() -> None:
+    df = _sample_df()
+    out = apply_advanced_filters(
+        df, [{"connector": None, "field": "Price", "operator": "between",
+              "value": 50.0, "value2": 200.0}]
+    )
+    assert set(out["Ticker"].tolist()) == {"ADS.DE", "BNP.PA"}
+
+
+def test_adv_no_dividend() -> None:
+    df = _sample_df()
+    out = apply_advanced_filters(
+        df, [{"connector": None, "field": "TTM Div Yield",
+              "operator": "no dividend", "value": None, "value2": None}]
+    )
+    # ADS has 0, IFX has None (treated as 0).
+    assert set(out["Ticker"].tolist()) == {"ADS.DE", "IFX.DE"}
+
+
+def test_adv_and_combination() -> None:
+    df = _sample_df()
+    rules = [
+        {"connector": None, "field": "Sector", "operator": "is",
+         "value": "Technology", "value2": None},
+        {"connector": "AND", "field": "Market Cap", "operator": ">",
+         "value": 100_000_000_000, "value2": None},
+    ]
+    out = apply_advanced_filters(df, rules)
+    assert out["Ticker"].tolist() == ["SAP.DE"]
+
+
+def test_adv_or_combination() -> None:
+    df = _sample_df()
+    rules = [
+        {"connector": None, "field": "Sector", "operator": "is",
+         "value": "Financials", "value2": None},
+        {"connector": "OR", "field": "Sector", "operator": "is",
+         "value": "Consumer", "value2": None},
+    ]
+    out = apply_advanced_filters(df, rules)
+    assert set(out["Ticker"].tolist()) == {"BNP.PA", "ADS.DE"}
+
+
+def test_adv_rule_with_none_value_does_not_crash() -> None:
+    df = _sample_df()
+    rules = [
+        {"connector": None, "field": "Company", "operator": "contains",
+         "value": None, "value2": None},
+    ]
+    out = apply_advanced_filters(df, rules)
+    # None value is a pass-through, so all rows remain.
+    assert len(out) == len(df)

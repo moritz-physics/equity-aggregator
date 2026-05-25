@@ -84,18 +84,18 @@ class _Member:
 # ---------------------------------------------------------------------------
 STI_MEMBERS: tuple[_Member, ...] = (
     _Member("D05.SI", "DBS Group Holdings Ltd", "SG1L01001701", 26.1695),
-    _Member("O39.SI", "Oversea-Chinese Banking Corporation Limited", "SG1S04926220", 15.9945),
+    _Member("O39.SI", "Oversea-Chinese Banking Corporation Limited", "SG1S04926220", 15.9945),  # noqa: E501
     _Member("U11.SI", "United Overseas Bank Limited", "SG1M31001969", 9.6304),
     _Member("Z74.SI", "Singapore Telecommunications Limited", "SG1T75931496", 6.8806),
     _Member("S68.SI", "Singapore Exchange Ltd.", "SG1J26887955", 3.7964),
     _Member("S63.SI", "Singapore Technologies Engineering Ltd", "SG1F60858221", 3.5129),
     _Member("J36.SI", "Jardine Matheson Holdings Limited", "BMG507361001", 3.4887),
     _Member("BN4.SI", "Keppel Ltd.", "SG1U68934629", 3.2124),
-    _Member("C38U.SI", "CapitaLand Integrated Commercial Trust", "SG1M51904654", 2.8349),
+    _Member("C38U.SI", "CapitaLand Integrated Commercial Trust", "SG1M51904654", 2.8349),  # noqa: E501
     _Member("H78.SI", "Hongkong Land Holdings Limited", "BMG4587L1090", 2.1560),
     _Member("A17U.SI", "CapitaLand Ascendas REIT", "SG1M77906915", 2.1240),
     _Member("C6L.SI", "Singapore Airlines Ltd.", "SG1V61937297", 2.1125),
-    _Member("BS6.SI", "Yangzijiang Shipbuilding (Holdings) Ltd.", "SG1U76934819", 1.9794),
+    _Member("BS6.SI", "Yangzijiang Shipbuilding (Holdings) Ltd.", "SG1U76934819", 1.9794),  # noqa: E501
     _Member("F34.SI", "Wilmar International Limited", "SG1T56930848", 1.3206),
     _Member("9CI.SI", "CapitaLand Investment Limited", "SGXE62145532", 1.2445),
     _Member("U96.SI", "Sembcorp Industries Ltd.", "SG1R50925390", 1.1373),
