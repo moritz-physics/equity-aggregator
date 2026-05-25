@@ -71,6 +71,7 @@ class _Member:
     ticker: str
     name: str
     isin: str
+    weight: float | None = None  # filled when authoritative source provides it
 
 
 # BEL 20 composition. Curated static map; review when Euronext Brussels
@@ -84,15 +85,23 @@ BEL20_MEMBERS: tuple[_Member, ...] = (
     _Member("AGS.BR", "ageas SA/NV", "BE0974264930"),
     _Member("APAM.BR", "Aperam SA", "LU0569974404"),
     _Member("ARGX.BR", "argenx SE", "NL0010832176"),
-    _Member("BEKB.BR", "NV Bekaert SA", "BE0003789394"),
+    # Bekaert: was BE0003789394 (invalid check digit). Verified via Euronext
+    # instrument search (https://live.euronext.com/...searchJSON?q=Bekaert).
+    _Member("BEKB.BR", "NV Bekaert SA", "BE0974258874"),
     _Member("BPOST.BR", "bpost NV/SA", "BE0974268972"),
     _Member("COFB.BR", "Cofinimmo SA", "BE0003593044"),
     _Member("COLR.BR", "Colruyt Group N.V.", "BE0974256852"),
-    _Member("DIE.BR", "D'Ieteren Group SA", "BE0974259238"),
+    # D'Ieteren: was BE0974259238 (invalid check digit). Authoritative via
+    # Euronext instrument search: BE0974259880.
+    _Member("DIE.BR", "D'Ieteren Group SA", "BE0974259880"),
     _Member("GBLB.BR", "Groupe Bruxelles Lambert SA", "BE0003797140"),
     _Member("KBC.BR", "KBC Group NV", "BE0003565737"),
-    _Member("LOTB.BR", "Lotus Bakeries NV", "BE0003532583"),
-    _Member("MELE.BR", "Melexis NV", "BE0003469031"),
+    # Lotus Bakeries: was BE0003532583 (invalid check digit). Authoritative
+    # via Euronext instrument search: BE0003604155.
+    _Member("LOTB.BR", "Lotus Bakeries NV", "BE0003604155"),
+    # Melexis: was BE0003469031 (invalid check digit). Authoritative via
+    # Euronext instrument search: BE0165385973.
+    _Member("MELE.BR", "Melexis NV", "BE0165385973"),
     _Member("PROX.BR", "Proximus PLC", "BE0003810273"),
     _Member("SOF.BR", "Sofina Société Anonyme", "BE0003717312"),
     _Member("SOLB.BR", "Solvay SA", "BE0003470755"),
@@ -267,6 +276,7 @@ def _build_constituent(
         beta=_coerce_float(yf_info.get("beta")),
         market_cap=_coerce_float(yf_info.get("marketCap")),
         sector=_coerce_str(yf_info.get("sector")),
+        weight=member.weight,
     )
 
 
@@ -292,6 +302,7 @@ async def _fetch_member(
             isin_source="static",
             country=INDEX_COUNTRY,
             currency="EUR",
+            weight=member.weight,
         )
 
 

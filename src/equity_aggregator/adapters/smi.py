@@ -63,6 +63,7 @@ class _Member:
     ticker: str
     name: str
     isin: str
+    weight: float | None = None  # filled when authoritative source provides it
 
 
 # SMI 20 composition. Curated static map; review when SIX rebalances
@@ -78,7 +79,9 @@ SMI_MEMBERS: tuple[_Member, ...] = (
     _Member("LOGN.SW", "Logitech International S.A.", "CH0025751329"),
     _Member("LONN.SW", "Lonza Group Ltd", "CH0013841017"),
     _Member("NESN.SW", "Nestlé S.A.", "CH0038863350"),
-    _Member("NOVN.SW", "Novartis AG", "CH0012221060"),
+    # Novartis: was CH0012221060 (invalid ISO 6166 check digit). The
+    # authoritative ISIN per SIX Swiss Exchange / Wikipedia is CH0012005267.
+    _Member("NOVN.SW", "Novartis AG", "CH0012005267"),
     _Member("PGHN.SW", "Partners Group Holding AG", "CH0024608827"),
     _Member("ROG.SW", "Roche Holding AG", "CH0012032048"),
     _Member("SAGN.SW", "Straumann Holding AG", "CH0012280076"),
@@ -257,6 +260,7 @@ def _build_constituent(
         beta=_coerce_float(yf_info.get("beta")),
         market_cap=_coerce_float(yf_info.get("marketCap")),
         sector=_coerce_str(yf_info.get("sector")),
+        weight=member.weight,
     )
 
 
@@ -282,6 +286,7 @@ async def _fetch_member(
             isin_source="static",
             country=INDEX_COUNTRY,
             currency="CHF",
+            weight=member.weight,
         )
 
 

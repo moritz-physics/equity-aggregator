@@ -87,7 +87,7 @@ def test_to_xlsx_bytes_non_empty(sample_query_result: QueryResult) -> None:
     assert len(raw) > 1000
 
 
-def test_to_xlsx_sheet_name_and_header_and_row_count(
+def test_to_xlsx_sheet_name_and_layout(
     sample_query_result: QueryResult,
 ) -> None:
     raw = to_xlsx(sample_query_result)
@@ -95,18 +95,44 @@ def test_to_xlsx_sheet_name_and_header_and_row_count(
     assert wb.sheetnames == ["DAX"]
 
     ws = wb["DAX"]
-    header_row = [c.value for c in ws[1]]
-    assert header_row == list(COLUMNS)
+    # Row 1 is the title row — contains the index name.
+    assert "DAX" in str(ws.cell(row=1, column=1).value)
 
-    # 3 constituents → rows 2..4 populated; ws.max_row should be 4.
-    assert ws.max_row == 1 + 3
-    assert ws.cell(row=2, column=1).value == "ADS.DE"
-    assert ws.cell(row=3, column=1).value == "SAP.DE"
-    assert ws.cell(row=4, column=1).value == "XYZ.DE"
+    # Row 2 is the column header row (all caps).
+    header_row = [ws.cell(row=2, column=c).value for c in range(1, 12)]
+    assert header_row[0] == "TICKER"
+    assert header_row[1] == "COMPANY"
+    assert all(isinstance(v, str) and v == v.upper() for v in header_row)
+
+    # 3 constituents → rows 3..5; ws.max_row should be 5.
+    assert ws.max_row == 2 + 3
+    assert ws.cell(row=3, column=1).value == "ADS.DE"
+    assert ws.cell(row=4, column=1).value == "SAP.DE"
+    assert ws.cell(row=5, column=1).value == "XYZ.DE"
+
+
+def test_to_xlsx_title_row_is_merged(sample_query_result: QueryResult) -> None:
+    raw = to_xlsx(sample_query_result)
+    wb = load_workbook(BytesIO(raw))
+    ws = wb["DAX"]
+    merged_ranges = [str(r) for r in ws.merged_cells.ranges]
+    assert any(r.startswith("A1:") and r.endswith("1") for r in merged_ranges)
+
+
+def test_to_xlsx_no_none_strings(sample_query_result: QueryResult) -> None:
+    raw = to_xlsx(sample_query_result)
+    wb = load_workbook(BytesIO(raw))
+    ws = wb["DAX"]
+    for row in ws.iter_rows(min_row=3, values_only=True):
+        for cell in row:
+            assert cell != "None"
+            assert cell is None or not (
+                isinstance(cell, str) and cell.lower() == "none"
+            )
 
 
 def test_to_xlsx_has_freeze_panes(sample_query_result: QueryResult) -> None:
     raw = to_xlsx(sample_query_result)
     wb = load_workbook(BytesIO(raw))
     ws = wb["DAX"]
-    assert ws.freeze_panes == "A2"
+    assert ws.freeze_panes == "A3"

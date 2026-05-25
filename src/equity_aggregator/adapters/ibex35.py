@@ -71,6 +71,7 @@ class _Member:
     ticker: str
     name: str
     isin: str
+    weight: float | None = None  # filled when authoritative source provides it
 
 
 # IBEX 35 composition. Curated static map; review when the Technical
@@ -104,7 +105,9 @@ IBEX35_MEMBERS: tuple[_Member, ...] = (
     _Member("MRL.MC", "Merlin Properties SOCIMI S.A.", "ES0105025003"),
     _Member("MTS.MC", "ArcelorMittal S.A.", "LU1598757687"),
     _Member("NTGY.MC", "Naturgy Energy Group S.A.", "ES0116870314"),
-    _Member("PUIG.MC", "Puig Brands S.A.", "ES0105631009"),
+    # Puig Brands: was ES0105631009 (invalid ISO 6166 check digit). The
+    # authoritative IPO ISIN per CNMV / Wikipedia is ES0105777017.
+    _Member("PUIG.MC", "Puig Brands S.A.", "ES0105777017"),
     _Member("RED.MC", "Redeia Corporación S.A.", "ES0173093024"),
     _Member("REP.MC", "Repsol S.A.", "ES0173516115"),
     _Member("ROVI.MC", "Laboratorios Farmacéuticos Rovi S.A.", "ES0157261019"),
@@ -285,6 +288,7 @@ def _build_constituent(
         beta=_coerce_float(yf_info.get("beta")),
         market_cap=_coerce_float(yf_info.get("marketCap")),
         sector=_coerce_str(yf_info.get("sector")),
+        weight=member.weight,
     )
 
 
@@ -310,6 +314,7 @@ async def _fetch_member(
             isin_source="static",
             country=INDEX_COUNTRY,
             currency="EUR",
+            weight=member.weight,
         )
 
 

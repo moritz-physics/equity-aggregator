@@ -40,6 +40,11 @@ class Constituent(BaseModel):
     beta: float | None = None
     market_cap: float | None = None
     sector: str | None = None
+    # Index weight as a percent (e.g. 9.23 for 9.23%). Sourced from the
+    # authoritative provider (ETF holdings file or index methodology page) at
+    # the time the static map was last regenerated. None for indices where we
+    # do not yet curate weights — the UI then falls back to market-cap sort.
+    weight: float | None = None
 
     @field_validator("ttm_div_yield")
     @classmethod

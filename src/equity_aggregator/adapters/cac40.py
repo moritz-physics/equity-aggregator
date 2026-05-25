@@ -73,6 +73,7 @@ class _Member:
     ticker: str
     name: str
     isin: str
+    weight: float | None = None  # filled when authoritative source provides it
 
 
 # CAC 40 composition. Curated static map; review when Euronext rebalances
@@ -100,7 +101,10 @@ CAC40_MEMBERS: tuple[_Member, ...] = (
     _Member("OR.PA", "L'Oréal SA", "FR0000120321"),
     _Member("LR.PA", "Legrand SA", "FR0010307819"),
     _Member("MC.PA", "LVMH Moët Hennessy Louis Vuitton SE", "FR0000121014"),
-    _Member("ML.PA", "Michelin (Cie Générale des Étab.) SCA", "FR001400AJD7"),
+    # Michelin: was FR001400AJD7 (fails ISO 6166 check digit). Authoritative
+    # ISIN per Euronext instrument search: FR001400AJ45 (Compagnie Générale
+    # des Établissements Michelin, the post-2024 SCA → SE structure).
+    _Member("ML.PA", "Michelin (Cie Générale des Étab.) SCA", "FR001400AJ45"),
     _Member("ORA.PA", "Orange SA", "FR0000133308"),
     _Member("RI.PA", "Pernod Ricard SA", "FR0000120693"),
     _Member("PUB.PA", "Publicis Groupe SA", "FR0000130577"),
@@ -289,6 +293,7 @@ def _build_constituent(
         beta=_coerce_float(yf_info.get("beta")),
         market_cap=_coerce_float(yf_info.get("marketCap")),
         sector=_coerce_str(yf_info.get("sector")),
+        weight=member.weight,
     )
 
 
@@ -314,6 +319,7 @@ async def _fetch_member(
             isin_source="static",
             country=INDEX_COUNTRY,
             currency="EUR",
+            weight=member.weight,
         )
 
 

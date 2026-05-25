@@ -71,6 +71,7 @@ class _Member:
     ticker: str
     name: str
     isin: str
+    weight: float | None = None  # filled when authoritative source provides it
 
 
 # WIG20 composition. Curated static map; review when GPW Benchmark rebalances
@@ -90,14 +91,28 @@ WIG20_MEMBERS: tuple[_Member, ...] = (
     _Member("LPP.WA", "LPP SA", "PLLPP0000011"),
     _Member("MBK.WA", "mBank S.A.", "PLBRE0000012"),
     _Member("OPL.WA", "Orange Polska S.A.", "PLTLKPL00017"),
-    _Member("PCO.WA", "Pepco Group N.V.", "LU2434412847"),
+    # Pepco Group N.V. is Dutch-incorporated (NL-prefix ISIN), not
+    # Luxembourg as the earlier map assumed. Authoritative ISIN per
+    # OpenFIGI reverse-lookup (returns "PEPCO GROUP NV") and Yahoo /
+    # MarketScreener listings: NL0015000AU7. The previous values
+    # (LU2434412847, then a check-digit-corrected LU2434412842) were both
+    # wrong — wrong country code AND no longer a real ISIN at all
+    # (OpenFIGI returns no record for them).
+    _Member("PCO.WA", "Pepco Group N.V.", "NL0015000AU7"),
     _Member("PEO.WA", "Bank Polska Kasa Opieki S.A.", "PLPEKAO00016"),
     _Member("PGE.WA", "PGE Polska Grupa Energetyczna S.A.", "PLPGER000010"),
     _Member("PKN.WA", "Orlen S.A.", "PLPKN0000018"),
     _Member("PKO.WA", "PKO Bank Polski S.A.", "PLPKO0000016"),
     _Member("PZU.WA", "Powszechny Zakład Ubezpieczeń SA", "PLPZU0000011"),
     _Member("SPL.WA", "Santander Bank Polska S.A.", "PLBZ00000044"),
-    _Member("ZAB.WA", "Żabka Group S.A.", "NL0015002CX0"),
+    # Żabka Group is incorporated in Luxembourg (not the Netherlands as the
+    # earlier map assumed). The IPO ISIN (Warsaw debut, Oct 2024) is
+    # LU2910446546. Confirmed via OpenFIGI ID_ISIN lookup, which returns
+    # "ZABKA GROUP SA" — and via the IPO press release. The previous values
+    # (NL0015002CX0, then a typo-fixed NL0015002CX3) were wrong: NL prefix
+    # implied Dutch domicile, and OpenFIGI maps NL0015002CX3 to QIAGEN N.V.,
+    # which would have silently shown the wrong company.
+    _Member("ZAB.WA", "Żabka Group S.A.", "LU2910446546"),
 )
 
 assert len(WIG20_MEMBERS) == 20, (
@@ -269,6 +284,7 @@ def _build_constituent(
         beta=_coerce_float(yf_info.get("beta")),
         market_cap=_coerce_float(yf_info.get("marketCap")),
         sector=_coerce_str(yf_info.get("sector")),
+        weight=member.weight,
     )
 
 
@@ -294,6 +310,7 @@ async def _fetch_member(
             isin_source="static",
             country=INDEX_COUNTRY,
             currency="PLN",
+            weight=member.weight,
         )
 
 

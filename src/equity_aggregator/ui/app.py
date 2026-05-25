@@ -295,6 +295,10 @@ def _render_table(df: pd.DataFrame) -> None:
             "Company": st.column_config.TextColumn("Company"),
             "ISIN": st.column_config.TextColumn("ISIN", width="medium"),
             "Country": st.column_config.TextColumn("Country", width="small"),
+            "Weight %": st.column_config.NumberColumn(
+                "Index Wt %", format="%.2f%%", width="small",
+                help="Position in the index (authoritative provider weight).",
+            ),
             "Price": st.column_config.NumberColumn(
                 "Price", format="%.2f", width="small"
             ),
@@ -318,16 +322,18 @@ def _download_row(result: QueryResult) -> None:
     st.markdown(
         '<div class="eq-section">Download</div>', unsafe_allow_html=True
     )
-    if len(result.indices) == 1:
-        base = result.indices[0].name.lower().replace(" ", "_")
-    else:
-        base = "indices"
+    index_slug = "_".join(
+        i.name.lower().replace(" ", "").replace("&", "").replace("/", "")
+        for i in result.indices
+    )
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    base_filename = f"{index_slug}_constituents_{date_str}"
     col_csv, col_json, col_xlsx = st.columns(3)
     with col_csv:
         st.download_button(
             "CSV",
             data=to_csv(result),
-            file_name=f"{base}_constituents.csv",
+            file_name=f"{base_filename}.csv",
             mime="text/csv",
             width="stretch",
         )
@@ -335,7 +341,7 @@ def _download_row(result: QueryResult) -> None:
         st.download_button(
             "JSON",
             data=to_json(result),
-            file_name=f"{base}_constituents.json",
+            file_name=f"{base_filename}.json",
             mime="application/json",
             width="stretch",
         )
@@ -343,7 +349,7 @@ def _download_row(result: QueryResult) -> None:
         st.download_button(
             "EXCEL",
             data=to_xlsx(result),
-            file_name=f"{base}_constituents.xlsx",
+            file_name=f"{base_filename}.xlsx",
             mime=(
                 "application/vnd.openxmlformats-officedocument."
                 "spreadsheetml.sheet"
@@ -367,7 +373,21 @@ def _data_sources_expander() -> None:
 
 def _cache_status_expander() -> None:
     with st.expander("Cache Status", expanded=False):
-        stats: dict[str, dict[str, object]] = ConstituentCache().stats()
+        ttl = st.select_slider(
+            "Cache TTL",
+            options=[1800, 3600, 21600, 86400],
+            value=3600,
+            format_func=lambda s: {
+                1800: "30 min",
+                3600: "1 hr",
+                21600: "6 hr",
+                86400: "24 hr",
+            }[s],
+            key="cache_ttl",
+        )
+        stats: dict[str, dict[str, object]] = ConstituentCache(
+            ttl_seconds=ttl
+        ).stats()
         if not stats:
             st.caption("Cache is empty.")
             return
@@ -454,6 +474,47 @@ def main() -> None:
         f'<div class="eq-section">Constituents — '
         f"Showing {len(filtered)} of {len(all_constituents)}</div>",
         unsafe_allow_html=True,
+    )
+    for index in result_obj.indices:
+        st.caption(
+            f"📅 {index.name}: last fetched "
+            f"{index.fetched_at.strftime('%Y-%m-%d %H:%M:%S')} UTC"
+        )
+
+    # Default to Index Weight when available — that's the "position in the
+    # index" the user expects to see. Falls back to Market Cap for indices
+    # without curated weights (yfinance market_cap is the next-best proxy).
+    if "sort_column" not in st.session_state:
+        st.session_state.sort_column = "Weight %"
+    if "sort_ascending" not in st.session_state:
+        st.session_state.sort_ascending = False
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.session_state.sort_column = st.selectbox(
+            "Sort by",
+            options=[
+                "Weight %",
+                "Market Cap",
+                "Price",
+                "TTM Div Yield",
+                "Beta",
+                "Company",
+                "Ticker",
+            ],
+            index=0,
+            key="sort_col_select",
+            label_visibility="collapsed",
+        )
+    with col2:
+        st.session_state.sort_ascending = st.toggle(
+            "Ascending", value=False, key="sort_asc_toggle"
+        )
+
+    filtered_df = filtered_df.sort_values(
+        st.session_state.sort_column,
+        ascending=st.session_state.sort_ascending,
+        na_position="last",
     )
     _render_table(filtered_df)
 

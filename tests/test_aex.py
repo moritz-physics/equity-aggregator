@@ -38,7 +38,7 @@ def _asml_info() -> dict[str, Any]:
 
 
 def test_build_constituent_maps_yfinance_fields() -> None:
-    member = _Member("ASML.AS", "ASML Holding N.V.", "NL0010273215")
+    member = _Member("ASML.AS", "ASML Holding N.V.", "NL0010273215", 16.3087)
     c = _build_constituent(member, _asml_info(), figi_record=None)
 
     assert c.ticker == "ASML.AS"
@@ -60,7 +60,7 @@ def test_build_constituent_maps_yfinance_fields() -> None:
 
 
 def test_build_constituent_prefers_yfinance_isin_when_present() -> None:
-    member = _Member("ASML.AS", "ASML Holding N.V.", "NL0000FROMSTATIC")
+    member = _Member("ASML.AS", "ASML Holding N.V.", "NL0000FROMSTATIC", 0.0)
     info = _asml_info() | {"isin": "NL0000FROMYFINANCE"}
     c = _build_constituent(member, info, figi_record=None)
     assert c.isin == "NL0000FROMYFINANCE"
@@ -68,7 +68,7 @@ def test_build_constituent_prefers_yfinance_isin_when_present() -> None:
 
 
 def test_build_constituent_treats_yfinance_dash_as_missing() -> None:
-    member = _Member("ASML.AS", "ASML Holding N.V.", "NL0010273215")
+    member = _Member("ASML.AS", "ASML Holding N.V.", "NL0010273215", 16.3087)
     info = _asml_info() | {"isin": "-"}
     c = _build_constituent(member, info, figi_record=None)
     assert c.isin == "NL0010273215"
@@ -76,7 +76,7 @@ def test_build_constituent_treats_yfinance_dash_as_missing() -> None:
 
 
 def test_build_constituent_uses_openfigi_isin_when_present() -> None:
-    member = _Member("ASML.AS", "ASML Holding N.V.", "NL0000FROMSTATIC")
+    member = _Member("ASML.AS", "ASML Holding N.V.", "NL0000FROMSTATIC", 0.0)
     info = _asml_info() | {"isin": None}
     figi = {
         "figi": "BBG000C1KBR2",
@@ -100,7 +100,7 @@ def test_resolve_isin_from_yfinance_handles_garbage() -> None:
 @pytest.mark.asyncio
 async def test_fetch_member_survives_total_failure() -> None:
     """When both yfinance and OpenFIGI fail/return empty, still produce a row."""
-    member = _Member("XYZ.AS", "Mystery Corp", "NL0000MYSTERY1")
+    member = _Member("XYZ.AS", "Mystery Corp", "NL0000MYSTERY1", 0.0)
 
     async def _empty_yf(_: str) -> dict[str, Any]:
         return {}
@@ -123,11 +123,18 @@ async def test_fetch_member_survives_total_failure() -> None:
     assert c.sector is None
 
 
-def test_aex_adapter_has_25_members() -> None:
-    assert len(AEX_MEMBERS) == 25
+def test_aex_adapter_has_expected_member_count() -> None:
+    # AEX is canonically 25; iShares fund holds up to ~30 with recent
+    # additions (ASR, MICC, EXOR, SBM Offshore, InPost, CVC, WDP).
+    assert 20 <= len(AEX_MEMBERS) <= 35
     tickers = [m.ticker for m in AEX_MEMBERS]
-    assert len(set(tickers)) == 25, "duplicate tickers in AEX_MEMBERS"
+    assert len(set(tickers)) == len(tickers), "duplicate tickers in AEX_MEMBERS"
     assert all(t.endswith(".AS") for t in tickers)
+    # Every member must carry a real ISO 6166 ISIN, not a sentinel.
+    for m in AEX_MEMBERS:
+        assert len(m.isin) == 12 and m.isin[:2].isalpha(), (
+            f"{m.ticker} has malformed ISIN {m.isin!r}"
+        )
 
 
 def test_aex_adapter_is_instantiable() -> None:
@@ -147,7 +154,7 @@ def test_aex_all_members_have_isin_entry() -> None:
 
 def test_aex_currency_on_mock_output() -> None:
     """Currency field from yfinance mock is EUR for AEX constituents."""
-    member = _Member("HEIA.AS", "Heineken N.V.", "NL0000009165")
+    member = _Member("HEIA.AS", "Heineken N.V.", "NL0000009165", 2.14)
     info = {
         "longName": "Heineken N.V.",
         "currentPrice": 68.86,

@@ -5,17 +5,17 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import patch
 
-import httpx
 import pytest
 
 from equity_aggregator.adapters import ftse100 as ftse100_module
 from equity_aggregator.adapters.ftse100 import (
+    FTSE100_ISINS,
+    FTSE100_MEMBERS,
     FTSE100Adapter,
     _build_constituent,
-    _fetch_one,
-    _fetch_tickers_from_wikipedia,
+    _fetch_member,
+    _Member,
     _normalise_price,
-    _with_suffix,
 )
 
 
@@ -65,27 +65,12 @@ def test_normalise_price_handles_none_price() -> None:
     assert currency == "GBP"
 
 
-# ---------------------- _with_suffix ----------------------------------------
-
-
-def test_with_suffix_appends_dot_l() -> None:
-    assert _with_suffix("SHEL") == "SHEL.L"
-
-
-def test_with_suffix_idempotent() -> None:
-    assert _with_suffix("SHEL.L") == "SHEL.L"
-
-
-def test_with_suffix_uppercases() -> None:
-    assert _with_suffix("shel") == "SHEL.L"
-
-
 # ---------------------- _build_constituent ----------------------------------
 
 
 def test_build_constituent_normalises_gbp_pence() -> None:
-    c = _build_constituent("SHEL.L", _shel_info())
-    assert c is not None
+    member = _Member("SHEL.L", "SHELL PLC", "GB00BP6MXD84", 7.2976)
+    c = _build_constituent(member, _shel_info())
     assert c.ticker == "SHEL.L"
     assert c.country == "GB"
     assert c.currency == "GBP"
@@ -95,190 +80,108 @@ def test_build_constituent_normalises_gbp_pence() -> None:
     assert c.market_cap == pytest.approx(178_350_866_432.0)
     assert c.ttm_div_yield == pytest.approx(3.63)
     assert c.ex_div_date is not None
-    assert c.isin is None
-    assert c.isin_source is None
+    # ISIN now always comes from the curated static map (was None before).
+    assert c.isin == "GB00BP6MXD84"
+    assert c.isin_source == "static"
+    assert c.weight == pytest.approx(7.2976)
 
 
 def test_build_constituent_no_double_conversion_for_gbp() -> None:
+    member = _Member("ABC.L", "ABC PLC", "GB0000000ABCD", 0.5)
     info = _shel_info() | {
         "currency": "GBP",
         "currentPrice": 25.0,
         "regularMarketPrice": 25.0,
     }
-    c = _build_constituent("ABC.L", info)
-    assert c is not None
+    c = _build_constituent(member, info)
     assert c.price == pytest.approx(25.0)
     assert c.currency == "GBP"
 
 
-def test_build_constituent_returns_none_on_empty_info() -> None:
-    assert _build_constituent("SHEL.L", {}) is None
-
-
-def test_build_constituent_returns_none_when_quote_type_missing() -> None:
-    info = _shel_info() | {"quoteType": None}
-    assert _build_constituent("SHEL.L", info) is None
+def test_build_constituent_falls_back_to_static_name_when_yf_empty() -> None:
+    member = _Member("XYZ.L", "Static Name PLC", "GB0000000XYZW", 0.1)
+    c = _build_constituent(member, {})
+    assert c.name == "Static Name PLC"
+    assert c.isin == "GB0000000XYZW"
+    assert c.isin_source == "static"
 
 
 def test_build_constituent_falls_back_to_regular_market_price() -> None:
+    member = _Member("SHEL.L", "SHELL PLC", "GB00BP6MXD84", 7.2976)
     info = _shel_info() | {"currentPrice": None}
-    c = _build_constituent("SHEL.L", info)
-    assert c is not None
+    c = _build_constituent(member, info)
     # 3205 GBp → 32.05 GBP
     assert c.price == pytest.approx(32.05)
     assert c.currency == "GBP"
 
 
-def test_build_constituent_uses_ticker_when_names_missing() -> None:
-    info = _shel_info() | {"shortName": None, "longName": None}
-    c = _build_constituent("WEIRD.L", info)
-    assert c is not None
-    assert c.name == "WEIRD.L"
-
-
-# ---------------------- _fetch_one ------------------------------------------
+# ---------------------- _fetch_member ---------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_fetch_one_returns_constituent() -> None:
+async def test_fetch_member_returns_constituent_on_success() -> None:
+    member = _Member("SHEL.L", "SHELL PLC", "GB00BP6MXD84", 7.2976)
+
     async def _ok(_: str) -> dict[str, Any]:
         return _shel_info()
 
     with patch.object(ftse100_module, "_fetch_yf_info", _ok):
-        c = await _fetch_one("SHEL.L")
+        c = await _fetch_member(member)
 
-    assert c is not None
     assert c.ticker == "SHEL.L"
     assert c.country == "GB"
     assert c.currency == "GBP"
+    assert c.isin == "GB00BP6MXD84"
 
 
 @pytest.mark.asyncio
-async def test_fetch_one_returns_none_on_empty_info() -> None:
-    async def _empty(_: str) -> dict[str, Any]:
-        return {}
+async def test_fetch_member_survives_total_failure() -> None:
+    """When yfinance blows up, still emit a row with static identity + GBP."""
+    member = _Member("DEAD.L", "Dead PLC", "GB000DEAD0001", 0.01)
 
-    with patch.object(ftse100_module, "_fetch_yf_info", _empty):
-        assert await _fetch_one("DEAD.L") is None
-
-
-@pytest.mark.asyncio
-async def test_fetch_one_returns_none_on_exception() -> None:
     async def _boom(_: str) -> dict[str, Any]:
         raise RuntimeError("network blew up")
 
     with patch.object(ftse100_module, "_fetch_yf_info", _boom):
-        assert await _fetch_one("SHEL.L") is None
+        c = await _fetch_member(member)
+
+    assert c.ticker == "DEAD.L"
+    assert c.name == "Dead PLC"
+    assert c.isin == "GB000DEAD0001"
+    assert c.isin_source == "static"
+    assert c.currency == "GBP"
+    assert c.price is None
 
 
-# ---------------------- _fetch_tickers_from_wikipedia -----------------------
+# ---------------------- static-map invariants -------------------------------
 
 
-_FAKE_HTML = """
-<html><body>
-  <table><tr><th>Unrelated</th></tr><tr><td>x</td></tr></table>
-  <table>
-    <tr><th>Company</th><th>Ticker</th><th>Sector</th></tr>
-    <tr><td>Shell plc</td><td>SHEL</td><td>Energy</td></tr>
-    <tr><td>AstraZeneca</td><td>AZN</td><td>Healthcare</td></tr>
-    <tr><td>HSBC</td><td>HSBA</td><td>Financials</td></tr>
-  </table>
-</body></html>
-"""
+def test_ftse100_member_count_matches_index_size() -> None:
+    # FTSE Russell maintains 100 names; iShares fund may briefly hold a few
+    # extras around rebalances. Cap the window to catch accidental drift.
+    assert 95 <= len(FTSE100_MEMBERS) <= 110
+    tickers = [m.ticker for m in FTSE100_MEMBERS]
+    assert len(set(tickers)) == len(tickers), "duplicate tickers"
+    assert all(t.endswith(".L") for t in tickers)
 
 
-@pytest.mark.asyncio
-async def test_fetch_tickers_appends_dot_l_suffix() -> None:
-    response = httpx.Response(
-        200,
-        text=_FAKE_HTML,
-        request=httpx.Request("GET", ftse100_module.WIKIPEDIA_URL),
-    )
-
-    async def _get(self: httpx.AsyncClient, url: str, **_: Any) -> httpx.Response:
-        return response
-
-    with patch.object(httpx.AsyncClient, "get", _get):
-        async with httpx.AsyncClient() as client:
-            tickers = await _fetch_tickers_from_wikipedia(client)
-
-    assert tickers == ["SHEL.L", "AZN.L", "HSBA.L"]
+def test_ftse100_every_member_has_a_real_isin() -> None:
+    """Regression: the previous adapter shipped ``isin=None`` for every
+    constituent. That was unacceptable for a finance app — the static map
+    must carry a 12-char ISO 6166 ISIN for every row.
+    """
+    for m in FTSE100_MEMBERS:
+        assert len(m.isin) == 12, f"{m.ticker} ISIN length wrong: {m.isin!r}"
+        assert m.isin[:2].isalpha(), f"{m.ticker} ISIN prefix not alpha"
+        assert m.isin in FTSE100_ISINS.values()
 
 
-@pytest.mark.asyncio
-async def test_fetch_tickers_raises_on_http_error() -> None:
-    response = httpx.Response(
-        403,
-        text="forbidden",
-        request=httpx.Request("GET", ftse100_module.WIKIPEDIA_URL),
-    )
-
-    async def _get(self: httpx.AsyncClient, url: str, **_: Any) -> httpx.Response:
-        return response
-
-    with patch.object(httpx.AsyncClient, "get", _get):
-        async with httpx.AsyncClient() as client:
-            with pytest.raises(httpx.HTTPStatusError):
-                await _fetch_tickers_from_wikipedia(client)
-
-
-@pytest.mark.asyncio
-async def test_fetch_tickers_raises_when_table_missing() -> None:
-    response = httpx.Response(
-        200,
-        text="<html><body><table><tr><th>X</th></tr><tr><td>1</td></tr></table></body></html>",
-        request=httpx.Request("GET", ftse100_module.WIKIPEDIA_URL),
-    )
-
-    async def _get(self: httpx.AsyncClient, url: str, **_: Any) -> httpx.Response:
-        return response
-
-    with patch.object(httpx.AsyncClient, "get", _get):
-        async with httpx.AsyncClient() as client:
-            with pytest.raises(RuntimeError, match="constituents table not found"):
-                await _fetch_tickers_from_wikipedia(client)
-
-
-# ---------------------- FTSE100Adapter.fetch_constituents -------------------
-
-
-@pytest.mark.asyncio
-async def test_fetch_constituents_full_flow_with_one_failure() -> None:
-    fake_tickers = ["SHEL.L", "AZN.L", "HSBA.L", "DEAD.L"]
-
-    async def _fake_wiki(_client: httpx.AsyncClient) -> list[str]:
-        return fake_tickers
-
-    async def _fake_yf(ticker: str) -> dict[str, Any]:
-        if ticker == "DEAD.L":
-            return {}
-        return _shel_info() | {"shortName": f"{ticker} Co"}
-
-    with (
-        patch.object(ftse100_module, "_fetch_tickers_from_wikipedia", _fake_wiki),
-        patch.object(ftse100_module, "_fetch_yf_info", _fake_yf),
-    ):
-        idx = await FTSE100Adapter().fetch_constituents()
-
-    assert idx.name == "FTSE 100"
-    assert idx.country == "GB"
-    assert len(idx.constituents) == 3
-    tickers = [c.ticker for c in idx.constituents]
-    assert "DEAD.L" not in tickers
-    assert all(c.country == "GB" for c in idx.constituents)
-    assert all(c.currency == "GBP" for c in idx.constituents)
-    assert all(c.isin is None for c in idx.constituents)
-    assert all(c.isin_source is None for c in idx.constituents)
-
-
-@pytest.mark.asyncio
-async def test_fetch_constituents_propagates_wikipedia_failure() -> None:
-    async def _boom(_client: httpx.AsyncClient) -> list[str]:
-        raise httpx.HTTPError("Wikipedia unreachable")
-
-    with patch.object(ftse100_module, "_fetch_tickers_from_wikipedia", _boom):
-        with pytest.raises(httpx.HTTPError):
-            await FTSE100Adapter().fetch_constituents()
+def test_ftse100_weights_are_in_descending_order() -> None:
+    """Static map is generated weight-desc so the UI's default ordering
+    reflects index-cap weighting.
+    """
+    weights = [m.weight for m in FTSE100_MEMBERS]
+    assert weights == sorted(weights, reverse=True)
 
 
 def test_ftse100_adapter_is_instantiable() -> None:

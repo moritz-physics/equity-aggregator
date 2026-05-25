@@ -65,40 +65,64 @@ class _Member:
     ticker: str
     name: str
     isin: str
+    weight: float  # index weight as %, sourced from iShares AEX ETF holdings
 
 
-# AEX 25 composition. Curated static map; review when Euronext rebalances
-# (typically quarterly). ISINs are ISO 6166 codes; Dutch securities start "NL".
+# ---------------------------------------------------------------------------
+# BEGIN GENERATED — scripts/gen_ishares_holdings.py aex
+# Regenerate via:  uv run python scripts/gen_ishares_holdings.py aex
+# Source:          iShares AEX UCITS ETF holdings (fund id 251712)
+#                  Composition tracks the AEX index; only Equity asset class
+#                  rows are kept (cash/futures filtered).
+# Notes:           The earlier hand-curated map carried several stale ISINs
+#                  (BESI: NL0000339760 → NL0012866412, Aegon: NL0000303709 →
+#                  BMG0112X1056 after the 2023 Bermuda redomicile, Unilever:
+#                  GB00B10RZP78 → GB00BVZK7T90 after consolidation, DSM-
+#                  Firmenich: NL0000009827 → CH1216478797 after merger).
+#                  Pulling from the ETF cures this class of bug at the source.
+# ---------------------------------------------------------------------------
 AEX_MEMBERS: tuple[_Member, ...] = (
-    _Member("ABN.AS", "ABN AMRO Bank N.V.", "NL0011540547"),
-    _Member("AD.AS", "Koninklijke Ahold Delhaize N.V.", "NL0011794037"),
-    _Member("ADYEN.AS", "Adyen N.V.", "NL0012969182"),
-    _Member("AGN.AS", "Aegon Ltd.", "NL0000303709"),
-    _Member("AKZA.AS", "Akzo Nobel N.V.", "NL0013267909"),
-    _Member("ASM.AS", "ASM International NV", "NL0000334118"),
-    _Member("ASML.AS", "ASML Holding N.V.", "NL0010273215"),
-    _Member("BESI.AS", "BE Semiconductor Industries N.V.", "NL0000339760"),
-    _Member("DSFIR.AS", "DSM-Firmenich AG", "NL0000009827"),
-    _Member("HEIA.AS", "Heineken N.V.", "NL0000009165"),
-    _Member("IMCD.AS", "IMCD N.V.", "NL0010801007"),
-    _Member("INGA.AS", "ING Groep N.V.", "NL0011821202"),
-    _Member("KPN.AS", "Koninklijke KPN N.V.", "NL0000009082"),
-    _Member("LIGHT.AS", "Signify N.V.", "NL0011821006"),
-    _Member("MT.AS", "ArcelorMittal S.A.", "LU1598757687"),
-    _Member("NN.AS", "NN Group N.V.", "NL0010773842"),
-    _Member("OCI.AS", "OCI N.V.", "NL0010558797"),
-    _Member("PHIA.AS", "Koninklijke Philips N.V.", "NL0000009538"),
-    _Member("PRX.AS", "Prosus N.V.", "NL0013654783"),
-    _Member("RAND.AS", "Randstad N.V.", "NL0000379121"),
-    _Member("REN.AS", "RELX PLC", "GB00B2B0DG97"),
-    _Member("SHELL.AS", "Shell plc", "GB00BP6MXD84"),
-    _Member("UMG.AS", "Universal Music Group N.V.", "NL0015000IY2"),
-    _Member("UNA.AS", "Unilever PLC", "GB00B10RZP78"),
-    _Member("WKL.AS", "Wolters Kluwer N.V.", "NL0000395903"),
+    _Member("ASML.AS", "ASML HOLDING NV", "NL0010273215", 16.3087),
+    _Member("SHELL.AS", "SHELL PLC", "GB00BP6MXD84", 13.5003),
+    _Member("UNA.AS", "UNILEVER PLC", "GB00BVZK7T90", 11.6423),
+    _Member("INGA.AS", "ING GROEP NV", "NL0011821202", 8.2363),
+    _Member("REN.AS", "RELX PLC", "GB00B2B0DG97", 5.6395),
+    _Member("PRX.AS", "PROSUS NV CLASS N", "NL0013654783", 5.0817),
+    _Member("ASM.AS", "ASM INTERNATIONAL NV", "NL0000334118", 4.6081),
+    _Member("AD.AS", "KONINKLIJKE AHOLD DELHAIZE NV", "NL0011794037", 3.5617),
+    _Member("ADYEN.AS", "ADYEN NV", "NL0012969182", 3.2080),
+    _Member("MT.AS", "ARCELORMITTAL SA", "LU1598757687", 2.5078),
+    _Member("UMG.AS", "UNIVERSAL MUSIC GROUP NV", "NL0015000IY2", 2.4277),
+    _Member("ABN.AS", "ABN AMRO BANK NV", "NL0011540547", 2.2193),
+    _Member("HEIA.AS", "HEINEKEN NV", "NL0000009165", 2.1436),
+    _Member("NN.AS", "NN GROUP NV", "NL0010773842", 2.1425),
+    _Member("BESI.AS", "BE SEMICONDUCTOR INDUSTRIES NV", "NL0012866412", 2.1302),
+    _Member("PHIA.AS", "KONINKLIJKE PHILIPS NV", "NL0000009538", 1.9295),
+    _Member("KPN.AS", "KONINKLIJKE KPN NV", "NL0000009082", 1.9071),
+    _Member("WKL.AS", "WOLTERS KLUWER NV", "NL0000395903", 1.5807),
+    _Member("DSFIR.AS", "DSM FIRMENICH AG", "CH1216478797", 1.5330),
+    _Member("ASRNL.AS", "ASR NEDERLAND NV", "NL0011872643", 1.0598),
+    _Member("AGN.AS", "AEGON LTD", "BMG0112X1056", 1.0068),
+    _Member("AKZA.AS", "AKZO NOBEL NV", "NL0013267909", 0.8413),
+    _Member("MICC.AS", "MAGNUM ICE CREAM NV", "NL0015002MS2", 0.7372),
+    _Member("EXO.AS", "EXOR NV", "NL0012059018", 0.6754),
+    _Member("IMCD.AS", "IMCD NV", "NL0010801007", 0.6020),
+    _Member("SBMO.AS", "SBM OFFSHORE NV", "NL0000360618", 0.5169),
+    _Member("WDP.AS", "WAREHOUSES DE PAUW NV", "BE0974349814", 0.4588),
+    _Member("INPST.AS", "INPOST SA", "LU2290522684", 0.4492),
+    _Member("CVC.AS", "CVC CAPITAL PARTNERS PLC", "JE00BRX98089", 0.3654),
 )
+# ---------------------------------------------------------------------------
+# END GENERATED
+# ---------------------------------------------------------------------------
 
-assert len(AEX_MEMBERS) == 25, (
-    f"AEX_MEMBERS has {len(AEX_MEMBERS)} entries, expected 25"
+# AEX is canonically a 25-stock index, but the iShares AEX UCITS ETF that we
+# pull from holds ~29 names — the index publisher (Euronext) has expanded
+# coverage with recent additions (ASR, Magnum Ice Cream, EXOR, SBM Offshore,
+# InPost, CVC, WDP) without removing established members. The fund is the
+# authoritative source for whatever the index currently is.
+assert 20 <= len(AEX_MEMBERS) <= 35, (
+    f"AEX_MEMBERS has {len(AEX_MEMBERS)} entries (expected 20–35)"
 )
 
 # Convenience dict for external access and test assertions
@@ -264,6 +288,7 @@ def _build_constituent(
         beta=_coerce_float(yf_info.get("beta")),
         market_cap=_coerce_float(yf_info.get("marketCap")),
         sector=_coerce_str(yf_info.get("sector")),
+        weight=member.weight,
     )
 
 
@@ -289,6 +314,7 @@ async def _fetch_member(
             isin_source="static",
             country=INDEX_COUNTRY,
             currency="EUR",
+            weight=member.weight,
         )
 
 

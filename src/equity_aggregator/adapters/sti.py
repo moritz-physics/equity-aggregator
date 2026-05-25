@@ -67,44 +67,56 @@ class _Member:
     ticker: str
     name: str
     isin: str
+    weight: float | None = None  # filled when authoritative source provides it
 
 
-# STI 30 composition. Curated static map; review when FTSE/SGX rebalances
-# (typically quarterly). ISINs are ISO 6166 codes; Singapore securities start
-# "SG". Two members (H78.SI, J36.SI) are Bermuda/Cayman-incorporated and
-# priced in USD on SGX — their ISINs start with their country of incorporation.
+# ---------------------------------------------------------------------------
+# BEGIN GENERATED — scripts/gen_sti_isins.py
+# Regenerate via:  uv run python scripts/gen_sti_isins.py
+# Source:          State Street SPDR Straits Times Index ETF (SGX:ES3)
+#                  holdings xlsx. The ETF tracks the STI, so holdings ==
+#                  constituents. Cash sleeves + the JPMorgan SGD liquidity
+#                  fund (1.9% sleeve, not part of the index) are filtered.
+# Notes:           Earlier hand-curated map had 16 ISINs that failed the
+#                  ISO 6166 check digit — those were guaranteed-wrong
+#                  values regardless of the company identity. This map is
+#                  the daily-truth from State Street's published holdings.
+# ---------------------------------------------------------------------------
 STI_MEMBERS: tuple[_Member, ...] = (
-    _Member("9CI.SI", "CapitaLand Investment Limited", "SG1X52918838"),
-    _Member("A17U.SI", "CapitaLand Ascendas REIT", "SG1M77906915"),
-    _Member("AJBU.SI", "Keppel DC REIT", "SG2C13941054"),
-    _Member("BN4.SI", "Keppel Ltd.", "SG1U68934629"),
-    _Member("BS6.SI", "Yangzijiang Shipbuilding (Holdings) Ltd.", "SG1U48932571"),
-    _Member("BUOU.SI", "Frasers Logistics & Commercial Trust", "SG2C32961642"),
-    _Member("C07.SI", "Jardine Cycle & Carriage Limited", "SG1V65931352"),
-    _Member("C09.SI", "City Developments Limited", "SG1R89002252"),
-    _Member("C38U.SI", "CapitaLand Integrated Commercial Trust", "SG1M51904654"),
-    _Member("C6L.SI", "Singapore Airlines Limited", "SG1V61937297"),
-    _Member("D05.SI", "DBS Group Holdings Ltd", "SG1L01001701"),
-    _Member("F34.SI", "Wilmar International Limited", "SG1T56930848"),
-    _Member("G13.SI", "Genting Singapore Limited", "SG1V75931523"),
-    _Member("H78.SI", "Hongkong Land Holdings Limited", "BMG4587L1067"),
-    _Member("J36.SI", "Jardine Matheson Holdings Limited", "KYG4762E1059"),
-    _Member("J69U.SI", "Frasers Centrepoint Trust", "SG2C19966327"),
-    _Member("ME8U.SI", "Mapletree Industrial Trust", "SG2C14962835"),
-    _Member("M44U.SI", "Mapletree Logistics Trust", "SG1S03926952"),
-    _Member("N2IU.SI", "Mapletree Pan Asia Commercial Trust", "SG1M38931769"),
-    _Member("O39.SI", "Oversea-Chinese Banking Corporation Limited", "SG1S04926220"),
-    _Member("S58.SI", "SATS Ltd.", "SG1V73932364"),
-    _Member("S63.SI", "Singapore Technologies Engineering Ltd", "SG1H50932590"),
-    _Member("S68.SI", "Singapore Exchange Limited", "SG1J26887955"),
-    _Member("T82U.SI", "Suntec Real Estate Investment Trust", "SG1M31001969"),
-    _Member("U11.SI", "United Overseas Bank Limited", "SG1M25090289"),
-    _Member("U14.SI", "UOL Group Limited", "SG1Q25931240"),
-    _Member("U96.SI", "Sembcorp Industries Ltd", "SG1Q52922370"),
-    _Member("V03.SI", "Venture Corporation Limited", "SG1Q31001918"),
-    _Member("Y92.SI", "Thai Beverage Public Company Limited", "TH0737010Z08"),
-    _Member("Z74.SI", "Singapore Telecommunications Limited", "SG1T75931496"),
+    _Member("D05.SI", "DBS Group Holdings Ltd", "SG1L01001701", 26.1695),
+    _Member("O39.SI", "Oversea-Chinese Banking Corporation Limited", "SG1S04926220", 15.9945),
+    _Member("U11.SI", "United Overseas Bank Limited", "SG1M31001969", 9.6304),
+    _Member("Z74.SI", "Singapore Telecommunications Limited", "SG1T75931496", 6.8806),
+    _Member("S68.SI", "Singapore Exchange Ltd.", "SG1J26887955", 3.7964),
+    _Member("S63.SI", "Singapore Technologies Engineering Ltd", "SG1F60858221", 3.5129),
+    _Member("J36.SI", "Jardine Matheson Holdings Limited", "BMG507361001", 3.4887),
+    _Member("BN4.SI", "Keppel Ltd.", "SG1U68934629", 3.2124),
+    _Member("C38U.SI", "CapitaLand Integrated Commercial Trust", "SG1M51904654", 2.8349),
+    _Member("H78.SI", "Hongkong Land Holdings Limited", "BMG4587L1090", 2.1560),
+    _Member("A17U.SI", "CapitaLand Ascendas REIT", "SG1M77906915", 2.1240),
+    _Member("C6L.SI", "Singapore Airlines Ltd.", "SG1V61937297", 2.1125),
+    _Member("BS6.SI", "Yangzijiang Shipbuilding (Holdings) Ltd.", "SG1U76934819", 1.9794),
+    _Member("F34.SI", "Wilmar International Limited", "SG1T56930848", 1.3206),
+    _Member("9CI.SI", "CapitaLand Investment Limited", "SGXE62145532", 1.2445),
+    _Member("U96.SI", "Sembcorp Industries Ltd.", "SG1R50925390", 1.1373),
+    _Member("U14.SI", "UOL Group Limited", "SG1S83002349", 0.9843),
+    _Member("V03.SI", "Venture Corporation Limited", "SG0531000230", 0.9805),
+    _Member("5E2.SI", "Seatrium Limited", "SGXE34184239", 0.9707),
+    _Member("AJBU.SI", "Keppel DC REIT", "SG1AF6000009", 0.9286),
+    _Member("ME8U.SI", "Mapletree Industrial Trust", "SG2C32962814", 0.8438),
+    _Member("M44U.SI", "Mapletree Logistics Trust", "SG1S03926213", 0.8335),
+    _Member("G13.SI", "Genting Singapore Limited", "SGXE21576413", 0.7004),
+    _Member("Y92.SI", "Thai Beverage Public Co. Ltd.", "TH0902010014", 0.6937),
+    _Member("C09.SI", "City Developments Limited", "SG1R89002252", 0.6746),
+    _Member("S58.SI", "SATS Ltd", "SG1I52882764", 0.6047),
+    _Member("J69U.SI", "Frasers Centrepoint Trust", "SG1T60930966", 0.6026),
+    _Member("N2IU.SI", "Mapletree Pan Asia Commercial Trust", "SG2D18969584", 0.5967),
+    _Member("BUOU.SI", "Frasers Logistics & Commercial Trust", "SG1CI9000006", 0.5671),
+    _Member("D01.SI", "DFI Retail Group Holdings Limited", "BMG2624N1535", 0.3441),
 )
+# ---------------------------------------------------------------------------
+# END GENERATED
+# ---------------------------------------------------------------------------
 
 assert len(STI_MEMBERS) == 30, (
     f"STI_MEMBERS has {len(STI_MEMBERS)} entries, expected 30"
@@ -273,6 +285,7 @@ def _build_constituent(
         beta=_coerce_float(yf_info.get("beta")),
         market_cap=_coerce_float(yf_info.get("marketCap")),
         sector=_coerce_str(yf_info.get("sector")),
+        weight=member.weight,
     )
 
 
@@ -298,6 +311,7 @@ async def _fetch_member(
             isin_source="static",
             country=INDEX_COUNTRY,
             currency="SGD",
+            weight=member.weight,
         )
 
 

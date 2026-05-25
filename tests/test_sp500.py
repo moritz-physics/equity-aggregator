@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
-import httpx
 import pytest
 
 from equity_aggregator.adapters import sp500 as sp500_module
 from equity_aggregator.adapters.sp500 import (
+    SP500_ISINS,
+    SP500_MEMBERS,
     SP500Adapter,
     _build_constituent,
-    _fetch_one,
-    _fetch_tickers_from_wikipedia,
+    _fetch_member,
+    _Member,
     _parse_yield,
+    _resolve_isin_from_yfinance,
 )
 
 
@@ -42,8 +44,8 @@ def _aapl_info() -> dict[str, Any]:
 
 
 def test_build_constituent_maps_yfinance_fields() -> None:
-    c = _build_constituent("AAPL", _aapl_info())
-    assert c is not None
+    member = _Member("AAPL", "APPLE INC", "US0378331005")
+    c = _build_constituent(member, _aapl_info())
     assert c.ticker == "AAPL"
     assert c.name == "Apple Inc."
     assert c.country == "US"
@@ -55,32 +57,48 @@ def test_build_constituent_maps_yfinance_fields() -> None:
     # 0.003409948 (decimal) → 0.3409948 (percent)
     assert c.ttm_div_yield == pytest.approx(0.3409948)
     assert c.ex_div_date is not None and c.ex_div_date.year == 2026
-    # ISIN deliberately blank for US tickers.
-    assert c.isin is None
-    assert c.isin_source is None
+    # ISIN populated from static map when yfinance returns None.
+    assert c.isin == "US0378331005"
+    assert c.isin_source == "static"
 
 
-def test_build_constituent_returns_none_on_empty_info() -> None:
-    assert _build_constituent("AAPL", {}) is None
+def test_build_constituent_prefers_yfinance_isin_when_present() -> None:
+    member = _Member("AAPL", "APPLE INC", "US0000FROMSTATIC")
+    info = _aapl_info() | {"isin": "US0000FROMYFINANCE"}
+    c = _build_constituent(member, info)
+    assert c.isin == "US0000FROMYFINANCE"
+    assert c.isin_source == "yfinance"
 
 
-def test_build_constituent_returns_none_when_quote_type_missing() -> None:
-    info = _aapl_info() | {"quoteType": None}
-    assert _build_constituent("AAPL", info) is None
+def test_build_constituent_treats_yfinance_dash_as_missing() -> None:
+    member = _Member("AAPL", "APPLE INC", "US0378331005")
+    info = _aapl_info() | {"isin": "-"}
+    c = _build_constituent(member, info)
+    assert c.isin == "US0378331005"
+    assert c.isin_source == "static"
+
+
+def test_build_constituent_uses_static_name_when_yfinance_empty() -> None:
+    member = _Member("WEIRD", "WEIRD STATIC NAME", "US9999999999")
+    info = _aapl_info() | {"shortName": None, "longName": None}
+    c = _build_constituent(member, info)
+    assert c.name == "WEIRD STATIC NAME"
 
 
 def test_build_constituent_falls_back_to_regular_market_price() -> None:
+    member = _Member("AAPL", "APPLE INC", "US0378331005")
     info = _aapl_info() | {"currentPrice": None}
-    c = _build_constituent("AAPL", info)
-    assert c is not None
+    c = _build_constituent(member, info)
     assert c.price == pytest.approx(308.82)
 
 
-def test_build_constituent_uses_ticker_when_names_missing() -> None:
-    info = _aapl_info() | {"shortName": None, "longName": None}
-    c = _build_constituent("WEIRD", info)
-    assert c is not None
-    assert c.name == "WEIRD"
+def test_resolve_isin_from_yfinance_handles_garbage() -> None:
+    assert _resolve_isin_from_yfinance({}) is None
+    assert _resolve_isin_from_yfinance({"isin": None}) is None
+    assert _resolve_isin_from_yfinance({"isin": ""}) is None
+    assert _resolve_isin_from_yfinance({"isin": "-"}) is None
+    assert _resolve_isin_from_yfinance({"isin": "  -  "}) is None
+    assert _resolve_isin_from_yfinance({"isin": " US0378331005 "}) == "US0378331005"
 
 
 # ---------------------- _parse_yield ----------------------------------------
@@ -100,150 +118,60 @@ def test_parse_yield_rejects_garbage() -> None:
     assert _parse_yield("nope") is None
 
 
-# ---------------------- _fetch_one ------------------------------------------
+# ---------------------- _fetch_member ---------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_fetch_one_returns_constituent() -> None:
+async def test_fetch_member_returns_constituent() -> None:
+    member = _Member("AAPL", "APPLE INC", "US0378331005")
+
     async def _ok(_: str) -> dict[str, Any]:
         return _aapl_info()
 
     with patch.object(sp500_module, "_fetch_yf_info", _ok):
-        c = await _fetch_one("AAPL")
+        c = await _fetch_member(member)
 
-    assert c is not None
     assert c.ticker == "AAPL"
-    assert c.isin is None
+    assert c.isin == "US0378331005"
+    assert c.isin_source == "static"
     assert c.country == "US"
 
 
 @pytest.mark.asyncio
-async def test_fetch_one_returns_none_on_empty_info() -> None:
+async def test_fetch_member_survives_total_failure() -> None:
+    """When yfinance fails, still produce a row from the static map."""
+    member = _Member("DEAD", "MYSTERY CORP", "US9999991009")
+
     async def _empty(_: str) -> dict[str, Any]:
         return {}
 
     with patch.object(sp500_module, "_fetch_yf_info", _empty):
-        assert await _fetch_one("DEAD") is None
+        c = await _fetch_member(member)
+
+    assert c.ticker == "DEAD"
+    assert c.name == "MYSTERY CORP"
+    assert c.isin == "US9999991009"
+    assert c.isin_source == "static"
+    assert c.country == "US"
+    assert c.price is None
 
 
 @pytest.mark.asyncio
-async def test_fetch_one_returns_none_on_exception() -> None:
+async def test_fetch_member_swallows_exception() -> None:
+    member = _Member("BOOM", "FAILS HARD", "US0000000007")
+
     async def _boom(_: str) -> dict[str, Any]:
         raise RuntimeError("network blew up")
 
     with patch.object(sp500_module, "_fetch_yf_info", _boom):
-        assert await _fetch_one("AAPL") is None
+        c = await _fetch_member(member)
+
+    assert c.ticker == "BOOM"
+    assert c.isin == "US0000000007"
+    assert c.isin_source == "static"
 
 
-# ---------------------- _fetch_tickers_from_wikipedia -----------------------
-
-
-_FAKE_HTML = """
-<html><body><table class="wikitable">
-  <tr><th>Symbol</th><th>Security</th></tr>
-  <tr><td>AAPL</td><td>Apple Inc.</td></tr>
-  <tr><td>MSFT</td><td>Microsoft</td></tr>
-  <tr><td>BRK.B</td><td>Berkshire Hathaway</td></tr>
-  <tr><td>BF.B</td><td>Brown-Forman</td></tr>
-</table></body></html>
-"""
-
-
-@pytest.mark.asyncio
-async def test_fetch_tickers_normalises_dot_to_dash() -> None:
-    response = httpx.Response(
-        200,
-        text=_FAKE_HTML,
-        request=httpx.Request("GET", sp500_module.WIKIPEDIA_URL),
-    )
-
-    async def _get(self: httpx.AsyncClient, url: str, **_: Any) -> httpx.Response:
-        return response
-
-    with patch.object(httpx.AsyncClient, "get", _get):
-        async with httpx.AsyncClient() as client:
-            tickers = await _fetch_tickers_from_wikipedia(client)
-
-    assert tickers == ["AAPL", "MSFT", "BRK-B", "BF-B"]
-    assert "BRK.B" not in tickers
-    assert "BF.B" not in tickers
-
-
-@pytest.mark.asyncio
-async def test_fetch_tickers_raises_on_http_error() -> None:
-    response = httpx.Response(
-        403,
-        text="forbidden",
-        request=httpx.Request("GET", sp500_module.WIKIPEDIA_URL),
-    )
-
-    async def _get(self: httpx.AsyncClient, url: str, **_: Any) -> httpx.Response:
-        return response
-
-    with patch.object(httpx.AsyncClient, "get", _get):
-        async with httpx.AsyncClient() as client:
-            with pytest.raises(httpx.HTTPStatusError):
-                await _fetch_tickers_from_wikipedia(client)
-
-
-@pytest.mark.asyncio
-async def test_fetch_tickers_raises_when_table_missing() -> None:
-    response = httpx.Response(
-        200,
-        text="<html><body><table><tr><th>X</th></tr><tr><td>1</td></tr></table></body></html>",
-        request=httpx.Request("GET", sp500_module.WIKIPEDIA_URL),
-    )
-
-    async def _get(self: httpx.AsyncClient, url: str, **_: Any) -> httpx.Response:
-        return response
-
-    with patch.object(httpx.AsyncClient, "get", _get):
-        async with httpx.AsyncClient() as client:
-            with pytest.raises(RuntimeError, match="constituents table not found"):
-                await _fetch_tickers_from_wikipedia(client)
-
-
-# ---------------------- SP500Adapter.fetch_constituents ---------------------
-
-
-@pytest.mark.asyncio
-async def test_fetch_constituents_full_flow_with_one_failure() -> None:
-    """Mock both Wikipedia and per-ticker fetch; one ticker fails → excluded."""
-    fake_tickers = ["AAPL", "MSFT", "BRK-B", "DEAD"]
-
-    async def _fake_wiki(_client: httpx.AsyncClient) -> list[str]:
-        return fake_tickers
-
-    async def _fake_yf(ticker: str) -> dict[str, Any]:
-        if ticker == "DEAD":
-            return {}
-        return _aapl_info() | {"shortName": f"{ticker} Inc"}
-
-    with (
-        patch.object(sp500_module, "_fetch_tickers_from_wikipedia", _fake_wiki),
-        patch.object(sp500_module, "_fetch_yf_info", _fake_yf),
-    ):
-        idx = await SP500Adapter().fetch_constituents()
-
-    assert idx.name == "S&P 500"
-    assert idx.country == "US"
-    assert len(idx.constituents) == 3
-    tickers = [c.ticker for c in idx.constituents]
-    assert "DEAD" not in tickers
-    assert "BRK-B" in tickers
-    assert all(c.country == "US" for c in idx.constituents)
-    assert all(c.isin is None for c in idx.constituents)
-    assert all(c.isin_source is None for c in idx.constituents)
-
-
-@pytest.mark.asyncio
-async def test_fetch_constituents_propagates_wikipedia_failure() -> None:
-    async def _boom(_client: httpx.AsyncClient) -> list[str]:
-        raise httpx.HTTPError("Wikipedia unreachable")
-
-    with patch.object(sp500_module, "_fetch_tickers_from_wikipedia", _boom):
-        with pytest.raises(httpx.HTTPError):
-            await SP500Adapter().fetch_constituents()
+# ---------------------- adapter / index integrity ---------------------------
 
 
 def test_sp500_adapter_is_instantiable() -> None:
@@ -253,5 +181,48 @@ def test_sp500_adapter_is_instantiable() -> None:
     assert callable(adapter.fetch_constituents)
 
 
-# Silence unused-import warnings for AsyncMock (kept available for future tests).
-_ = AsyncMock
+def test_sp500_members_count_is_around_503() -> None:
+    # S&P 500 has 503 stocks (3 dual-class share companies).
+    # Allow ±5 to absorb rebalances between regenerations.
+    assert 498 <= len(SP500_MEMBERS) <= 510
+    tickers = [m.ticker for m in SP500_MEMBERS]
+    assert len(set(tickers)) == len(tickers), "duplicate tickers in SP500_MEMBERS"
+
+
+def test_sp500_all_isins_start_with_us() -> None:
+    """All S&P 500 ISINs (CINS-based for US listings) must start with 'US'."""
+    for ticker, isin in SP500_ISINS.items():
+        assert isin.startswith("US"), f"{ticker} ISIN {isin!r} missing 'US' prefix"
+        assert len(isin) == 12, f"{ticker} ISIN {isin!r} not 12 chars"
+
+
+def test_sp500_all_members_have_isin_entry() -> None:
+    for m in SP500_MEMBERS:
+        assert m.ticker in SP500_ISINS
+        assert SP500_ISINS[m.ticker] == m.isin
+
+
+@pytest.mark.asyncio
+async def test_fetch_constituents_uses_static_members_with_yfinance_mock() -> None:
+    """Drive a 2-member adapter through a fully-mocked yfinance pipeline."""
+    members = (
+        _Member("AAPL", "APPLE INC", "US0378331005"),
+        _Member("DEAD", "MYSTERY CORP", "US9999991009"),
+    )
+
+    async def _fake_yf(ticker: str) -> dict[str, Any]:
+        if ticker == "DEAD":
+            return {}
+        return _aapl_info()
+
+    with patch.object(sp500_module, "_fetch_yf_info", _fake_yf):
+        idx = await SP500Adapter(members=members).fetch_constituents()
+
+    assert idx.name == "S&P 500"
+    assert idx.country == "US"
+    # Static-map driven: every member produces a row even on yfinance failure.
+    assert len(idx.constituents) == 2
+    tickers = [c.ticker for c in idx.constituents]
+    assert tickers == ["AAPL", "DEAD"]
+    assert all(c.isin and c.isin.startswith("US") for c in idx.constituents)
+    assert all(c.country == "US" for c in idx.constituents)

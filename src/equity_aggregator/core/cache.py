@@ -69,11 +69,14 @@ class ConstituentCache:
         *,
         db_path: Path | None = None,
         default_ttl_seconds: int = DEFAULT_TTL_SECONDS,
+        ttl_seconds: int | None = None,
     ) -> None:
         self._engine: Engine = (
             _default_engine if db_path is None else _make_engine(db_path)
         )
-        self._default_ttl_seconds = default_ttl_seconds
+        self._default_ttl_seconds = (
+            ttl_seconds if ttl_seconds is not None else default_ttl_seconds
+        )
 
     def _now(self) -> datetime:
         return datetime.now(tz=UTC)
